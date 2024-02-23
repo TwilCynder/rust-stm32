@@ -1,4 +1,4 @@
-/**
+/*
  *	Rust on STM32 Project by Rouilles en GeraniumTM
  *	Copyright (C) 2024 Université de Toulouse :
  *   - Oussama Felfel - oussama.felfel@univ-tlse3.fr
@@ -28,42 +28,58 @@
  *	but WITHOUT ANY WARRANTY; without even the implied warranty of
  *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *	GNU General Public License for more details.
-**/
-extern crate core;
-use crate::core::ptr::read_volatile;
-use crate::core::ptr::write_volatile;
+*/
 
-pub const HIGH: u8 = 1;
-pub const LOW: u8 = 0;
+use geranium_rt::println;
+use geranium_rt::stm32rustlib::gpio::*;
+use geranium_rt::stm32rustlib::rcc::*;
+use geranium_rt::stm32rustlib::various::{HIGH, LOW};
+use geranium_seq::sequencer::task::*;
 
-#[inline(always)]
-pub fn mask(l: u32) -> u32 {
-    (1 << (l)) - 1
+const MY_LED: (char, u32) = ('D', 12); // Built-in green led
+
+// derive Debug (/Display if you have an allocator) to print your struct
+#[derive(Debug)]
+pub struct LedOn {
+    // use variables to share state between calls
+    count: u32,
 }
 
-#[inline(always)]
-pub fn get_bits(x: u32, i: u32, l: u32) -> u32 {
-    ((x) >> (i)) & mask(l)
+impl Task for LedOn {
+    fn execute(&mut self) -> () {
+        digital_write(MY_LED, HIGH);
+        self.count += 1;
+        println!("{:?}, count: {}", self, self.count);
+    }
+
+    fn new() -> LedOn {
+        LedOn { count: 0 }
+    }
+
+    fn init(&mut self) {
+        println!("init {:?}", self);
+        rcc_ahb1enr_seti(RCC_AHB1ENR_GPIODEN);
+        gpiod_moder_set(MY_LED.1 * 2, 2, GPIO_MODER_OUT);
+    }
 }
 
-#[inline(always)]
-pub fn rep_bits(x: u32, i: u32, l: u32, y: u32) -> u32 {
-    ((x) & !(mask(l) << i)) | ((y) << (i))
+#[derive(Debug)]
+pub struct LedOff {
+    icount: i32,
 }
 
-// Some FLASH variables
-pub const FLASH_ADR: u32 = 0x40023C00;
-pub const FLASH_ACR_OFFSET: u32 = 0x00;
-pub const FLASH_ACR_LATENCY: u32 = 0; //range = 2 bits
-pub const FLASH_ACR_DCEN: u32 = 1 << 10;
-pub const FLASH_ACR_ICEN: u32 = 1 << 9;
+impl Task for LedOff {
+    fn execute(&mut self) -> () {
+        digital_write(MY_LED, LOW);
+        self.icount += 1;
+        println!("{:?}, icount: {}", self, self.icount);
+    }
 
-#[inline(always)]
-pub fn flash_acr_write(value: u32) {
-    unsafe { write_volatile((FLASH_ADR + FLASH_ACR_OFFSET) as *mut u32, value) };
-}
+    fn new() -> LedOff {
+        LedOff { icount: 0 }
+    }
 
-#[inline(always)]
-pub fn flash_acr_read() -> u32 {
-    unsafe { read_volatile((FLASH_ADR + FLASH_ACR_OFFSET) as *mut u32) }
+    fn init(&mut self) {
+        println!("init {:?}", self);
+    }
 }

@@ -1,4 +1,6 @@
-/**
+#![no_std]
+#![no_main]
+/*
  *	Rust on STM32 Project by Rouilles en GeraniumTM
  *	Copyright (C) 2024 Université de Toulouse :
  *   - Oussama Felfel - oussama.felfel@univ-tlse3.fr
@@ -28,42 +30,53 @@
  *	but WITHOUT ANY WARRANTY; without even the implied warranty of
  *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *	GNU General Public License for more details.
-**/
-extern crate core;
-use crate::core::ptr::read_volatile;
-use crate::core::ptr::write_volatile;
+*/
 
-pub const HIGH: u8 = 1;
-pub const LOW: u8 = 0;
+extern crate geranium_rt;
+use core::cell::RefCell;
 
-#[inline(always)]
-pub fn mask(l: u32) -> u32 {
-    (1 << (l)) - 1
-}
+mod user_tasks;
+use user_tasks::*;
+use geranium_seq::sequencer::internal::strict::*;
+use geranium_seq::sequencer::task::Task;
 
-#[inline(always)]
-pub fn get_bits(x: u32, i: u32, l: u32) -> u32 {
-    ((x) >> (i)) & mask(l)
-}
+#[no_mangle]
+fn main() {
+    // Start of Generated code
+    let hyperperiod: u32 = {{hyperperiod}};
 
-#[inline(always)]
-pub fn rep_bits(x: u32, i: u32, l: u32, y: u32) -> u32 {
-    ((x) & !(mask(l) << i)) | ((y) << (i))
-}
+    {%- for task in tasks %}
+    let mut t_{{task.id}} = {{task.taskStruct}}::new();
+    {%- endfor %}
 
-// Some FLASH variables
-pub const FLASH_ADR: u32 = 0x40023C00;
-pub const FLASH_ACR_OFFSET: u32 = 0x00;
-pub const FLASH_ACR_LATENCY: u32 = 0; //range = 2 bits
-pub const FLASH_ACR_DCEN: u32 = 1 << 10;
-pub const FLASH_ACR_ICEN: u32 = 1 << 9;
+    {%- for task in tasks %}
+    let ot_{{task.id}} = RefCell::new(OrdoTask {
+        task: &mut t_{{task.id}}
+    });
+    {%- endfor %}
 
-#[inline(always)]
-pub fn flash_acr_write(value: u32) {
-    unsafe { write_volatile((FLASH_ADR + FLASH_ACR_OFFSET) as *mut u32, value) };
-}
 
-#[inline(always)]
-pub fn flash_acr_read() -> u32 {
-    unsafe { read_volatile((FLASH_ADR + FLASH_ACR_OFFSET) as *mut u32) }
+    let jobs = [
+    {%- for job in jobs %}
+        Job {
+            ordo_task: &ot_{{job.taskId}},
+            start: {{job.startTime}},
+        },
+    {%- endfor %}
+    ];
+
+    {
+        let mut ordo_tasks = [
+            {%- for task in tasks %}
+            &ot_{{task.id}},
+            {%- endfor %}
+        ];
+        init_tasks(&mut ordo_tasks);
+    }
+
+    run_sequencer(
+        &jobs,
+        hyperperiod
+    );
+    // End of generated code
 }
